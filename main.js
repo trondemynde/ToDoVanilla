@@ -20,8 +20,10 @@ window.addEventListener('load', async () => {
     // When the button is clicked, add a new task
     addTask.addEventListener('click', async () => {
         const task = await createTaskOnServer(); // Create a new task on the server and locally
-        const taskRow = createTaskRow(task); // Create an HTML row for the new task
-        taskList.appendChild(taskRow); // Add the task row to the page
+        if (task) {
+            const taskRow = createTaskRow(task); // Create an HTML row for the new task
+            taskList.appendChild(taskRow); // Add the task row to the page
+        }
     });
 });
 
@@ -48,8 +50,8 @@ async function createTaskOnServer() {
     lastTaskId++;
 
     const task = {
-        title: 'Task ' + lastTaskId, // Changed from 'name' to 'title'
-        description: 'Description for task ' + lastTaskId, // Added description
+        title: 'Task ' + lastTaskId,
+        description: 'Description for task ' + lastTaskId,
         completed: false
     };
 
@@ -80,6 +82,8 @@ async function createTaskOnServer() {
 }
 
 async function updateTaskOnServer(task) {
+    console.log('Sending update to server:', task); // Keep this log for debugging
+
     try {
         const response = await fetch(`https://demo2.z-bit.ee/tasks/${task.id}`, {
             method: 'PUT',
@@ -87,7 +91,11 @@ async function updateTaskOnServer(task) {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${AUTH_TOKEN}`
             },
-            body: JSON.stringify(task)
+            body: JSON.stringify({
+                title: task.title,
+                desc: task.desc,
+                completed: task.marked_as_done
+            })
         });
 
         if (!response.ok) {
@@ -98,7 +106,8 @@ async function updateTaskOnServer(task) {
 
         const updatedTask = await response.json();
         console.log('Updated Task:', updatedTask);
-        // Update local task array if needed
+
+        // Update local task array
         const index = tasks.findIndex(t => t.id === task.id);
         if (index !== -1) {
             tasks[index] = updatedTask;
@@ -107,7 +116,6 @@ async function updateTaskOnServer(task) {
         console.error('Error updating task on server:', error);
     }
 }
-
 function renderTask(task) {
     const taskRow = createTaskRow(task);
     taskList.appendChild(taskRow);
@@ -117,32 +125,28 @@ function createTaskRow(task) {
     let taskRow = document.querySelector('[data-template="task-row"]').cloneNode(true);
     taskRow.removeAttribute('data-template');
 
-    // Fill in the form fields with task data
     const titleInput = taskRow.querySelector("[name='title']");
     if (titleInput) {
         titleInput.value = task.title;
-    } else {
-        console.error("Title input not found");
     }
 
     const descriptionInput = taskRow.querySelector("[name='description']");
     if (descriptionInput) {
-        descriptionInput.value = task.description;
-    } else {
-        console.error("Description input not found");
+        descriptionInput.value = task.desc || '';
     }
 
     const checkbox = taskRow.querySelector("[name='completed']");
     if (checkbox) {
-        checkbox.checked = task.completed;
+        checkbox.checked = task.marked_as_done;
+        checkbox.removeEventListener('change', handleCheckboxChange); // Remove existing listener
+        checkbox.addEventListener('change', handleCheckboxChange);
+    }
 
-        // Add an event listener for checkbox change
-        checkbox.addEventListener('change', async () => {
-            task.completed = checkbox.checked;
-            await updateTaskOnServer(task);
-        });
-    } else {
-        console.error("Completed checkbox not found");
+    // Event handler function
+    function handleCheckboxChange() {
+        task.marked_as_done = checkbox.checked;
+        console.log('Checkbox changed:', task);
+        updateTaskOnServer(task);
     }
 
     const deleteButton = taskRow.querySelector('.delete-task');
@@ -160,7 +164,6 @@ function createTaskRow(task) {
 
     return taskRow;
 }
-    
 
 // Delete a task from the server (DELETE request)
 async function deleteTaskOnServer(taskId) {
