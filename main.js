@@ -3,12 +3,15 @@ let lastTaskId = 0;
 
 let taskList;
 let addTask;
+let updateTask;
 
 const AUTH_TOKEN = 'Ze5VLQ-r2C1KXVrhiJqd7YrgZJF5MTnC';
 
+// Initialize on window load
 window.addEventListener('load', async () => {
     taskList = document.querySelector('#task-list');
     addTask = document.querySelector('#add-task');
+    updateTask = document.querySelector('#update-task'); // Combine initialization
 
     // Fetch existing tasks from the server and render them
     const fetchedTasks = await getTasksFromServer();
@@ -17,13 +20,18 @@ window.addEventListener('load', async () => {
         renderTask(task);
     });
 
-    // When the button is clicked, add a new task
+    // Add task when the button is clicked
     addTask.addEventListener('click', async () => {
-        const task = await createTaskOnServer(); // Create a new task on the server and locally
+        const task = await createTaskOnServer();
         if (task) {
-            const taskRow = createTaskRow(task); // Create an HTML row for the new task
-            taskList.appendChild(taskRow); // Add the task row to the page
+            const taskRow = createTaskRow(task);
+            taskList.appendChild(taskRow);
         }
+    });
+
+    // Update all tasks when the update button is clicked
+    updateTask.addEventListener('click', async () => {
+        await updateAllTasksOnServer();
     });
 });
 
@@ -51,8 +59,8 @@ async function createTaskOnServer() {
 
     const task = {
         title: 'Task ' + lastTaskId,
-        description: 'Description for task ' + lastTaskId,
-        completed: false
+        desc: 'Description for task ' + lastTaskId,
+        marked_as_done: false
     };
 
     try {
@@ -81,8 +89,28 @@ async function createTaskOnServer() {
     }
 }
 
+async function updateAllTasksOnServer() {
+    for (const task of tasks) {
+        await updateTaskOnServer(task); // Update each task individually
+    }
+}
+
+// Update task on the server (PUT request)
 async function updateTaskOnServer(task) {
-    console.log('Sending update to server:', task); // Keep this log for debugging
+    if (!task || !task.id) {
+        console.error('Task is undefined or missing ID:', task);
+        return;
+    }
+
+
+    // Fetch the latest values from the input fields for the current task row
+    const taskRow = document.querySelector(`[data-task-id="${task.id}"]`);
+    if (taskRow) {
+        task.title = taskRow.querySelector("[name='title']").value;
+        task.desc = taskRow.querySelector("[name='description']").value;
+        task.marked_as_done = taskRow.querySelector("[name='completed']").checked;
+    }
+
 
     try {
         const response = await fetch(`https://demo2.z-bit.ee/tasks/${task.id}`, {
@@ -94,7 +122,7 @@ async function updateTaskOnServer(task) {
             body: JSON.stringify({
                 title: task.title,
                 desc: task.desc,
-                completed: task.marked_as_done
+                marked_as_done: task.marked_as_done
             })
         });
 
@@ -116,14 +144,17 @@ async function updateTaskOnServer(task) {
         console.error('Error updating task on server:', error);
     }
 }
+
 function renderTask(task) {
     const taskRow = createTaskRow(task);
     taskList.appendChild(taskRow);
 }
 
+// Modify the createTaskRow function to set data-task-id for each task row
 function createTaskRow(task) {
     let taskRow = document.querySelector('[data-template="task-row"]').cloneNode(true);
     taskRow.removeAttribute('data-template');
+    taskRow.setAttribute('data-task-id', task.id); // Set a data attribute for easy selection
 
     const titleInput = taskRow.querySelector("[name='title']");
     if (titleInput) {
@@ -138,7 +169,7 @@ function createTaskRow(task) {
     const checkbox = taskRow.querySelector("[name='completed']");
     if (checkbox) {
         checkbox.checked = task.marked_as_done;
-        checkbox.removeEventListener('change', handleCheckboxChange); // Remove existing listener
+        checkbox.removeEventListener('change', handleCheckboxChange);
         checkbox.addEventListener('change', handleCheckboxChange);
     }
 
@@ -146,7 +177,6 @@ function createTaskRow(task) {
     function handleCheckboxChange() {
         task.marked_as_done = checkbox.checked;
         console.log('Checkbox changed:', task);
-        updateTaskOnServer(task);
     }
 
     const deleteButton = taskRow.querySelector('.delete-task');
@@ -157,7 +187,7 @@ function createTaskRow(task) {
             tasks.splice(tasks.indexOf(task), 1);
         });
     } else {
-        console.error("Delete button not found");
+        console.error('Delete button not found');
     }
 
     hydrateAntCheckboxes(taskRow);
@@ -193,8 +223,7 @@ function hydrateAntCheckboxes(element) {
         let wrapper = elements[i];
 
         // Skip if already processed
-        if (wrapper.__hydrated)
-            continue;
+        if (wrapper.__hydrated) continue;
         wrapper.__hydrated = true;
 
         const checkbox = wrapper.querySelector('.ant-checkbox');
